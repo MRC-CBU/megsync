@@ -1,5 +1,5 @@
 % Interface for National Instruments PCI 6503 card
-% Version 1.2
+% Version 1.3
 %
 % DESCRIPTION
 %
@@ -13,9 +13,7 @@
 %
 % 	Clock						= interal clock (seconds past since the first scanner pulse or clock reset)
 %
-% 	Buttons						= current state of the any button
-%   ButtonPresses               = index/indices of each button(s) pressed since last check
-%   TimeOfButtonPresses         = time (according to the internal clock) of each button(s) pressed since last check
+% 	Buttons						= current state of the button box
 % 	LastButtonPress				= index/indices of the last button(s) pressed
 % 	TimeOfLastButtonPress		= time (according to the internal clock) of the last button press (any)
 %   BBoxTimeout                 = set a non-Inf value (in seconds) to wait for button press only for a limited time
@@ -70,9 +68,10 @@
 %    	fprintf('pressed: %2.3fs\n',MEG.TimeOfLastButtonPress);
 %	end
 %_______________________________________________________________________
-% Copyright (C) 2015 MRC CBSU Cambridge
+% Copyright (C) 2017 MRC CBSU Cambridge
 %
-% Tibor Auer: tibor.auer@mrc-cbu.cam.ac.uk
+% Original by Tibor Auer.
+% Updates by Johan Carlin: johan.carlin@mrc-cbu.cam.ac.uk
 %_______________________________________________________________________
 
 classdef MEGSynchClass < handle
@@ -84,9 +83,6 @@ classdef MEGSynchClass < handle
     end
     
     properties (SetAccess = private)
-        ButtonPresses
-        TimeOfButtonPresses
-        
         LastButtonPress
     end
     
@@ -238,26 +234,28 @@ classdef MEGSynchClass < handle
         function WaitForButtonPress(obj,timeout,ind)
             BBoxQuery = obj.Clock;
             
+            if ~exist('timeout','var') || isempty(timeout)
+                timeout = Inf;
+            end
+            
+            if ~exist('ind') || isempty(ind)
+                ind = 1:5;
+            end
+            
+            % find button label
+            buttonlabel = obj.BTable(ind,:).Buttons;
+            
             % Reset indicator
-            obj.ButtonPresses = [];
-            obj.TimeOfButtonPresses = [];
             obj.LastButtonPress = [];
             
             % timeout
-            if (nargin < 2 || isempty(timeout)), timeout = obj.BBoxTimeout; end
             wait = timeout < 0; % wait until timeout even in case of response
             timeout = abs(timeout);
             
             while (~obj.Buttons ||... % button pressed
                     wait || ...
-                    (nargin >= 3 && ~isempty(ind) && ~any(obj.LastButtonPress == ind))) && ... % correct button pressed
+                    isempty(intersect(obj.LastButtonPress,buttonlabel))) && ... % correct button pressed
                     (obj.Clock - BBoxQuery) < timeout % timeout
-                if ~isempty(obj.LastButtonPress)
-                    if nargin >= 3 && ~isempty(ind) && ~any(obj.LastButtonPress == ind), continue; end % incorrect button
-                    if ~isempty(obj.TimeOfButtonPresses) && (obj.TimeOfButtonPresses(end) == obj.TimeOfLastButtonPress), continue; end % same event
-                    obj.ButtonPresses = horzcat(obj.ButtonPresses,obj.LastButtonPress); 
-                    obj.TimeOfButtonPresses = horzcat(obj.TimeOfButtonPresses,ones(1,numel(obj.LastButtonPress))*obj.TimeOfLastButtonPress);
-                end
             end
         end
         
@@ -288,14 +286,14 @@ classdef MEGSynchClass < handle
             obj.Refresh;
             if obj.BBoxWaitForRealease
                 if any(obj.Datap) && all(~(obj.Data.*obj.Datap))
-                    % obj.LastButtonPress = find(obj.Datap);
+%                     obj.LastButtonPress = find(obj.Datap);
                     obj.LastButtonPress = obj.BTable(find(obj.Datap),:).Buttons;
                     obj.Datap(:) = 0;
                     val = 1;
                 end
             else
                 if any(obj.Data)
-                    % obj.LastButtonPress = find(obj.Data);
+                    %                 obj.LastButtonPress = find(obj.Data);
                     obj.LastButtonPress = obj.BTable(find(obj.Data),:).Buttons;
                     obj.Data(:) = 0;
                     val = 1;
@@ -310,7 +308,7 @@ classdef MEGSynchClass < handle
 			
             % get data
 			if obj.isDAQ
-                data = inputSingleScan(obj.DAQ);
+                data = inputSingleScan(obj.DAQ); % inverted
             else
                 data = zeros(1,obj.nChannels);
             end
