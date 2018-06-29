@@ -311,14 +311,12 @@ classdef MEGSynchClass < handle
                 data = inputSingleScan(obj.DAQ); % inverted
             else
                 data = zeros(1,obj.nChannels);
-            end
-            
-            
-            % button press emulation (keyboard) via PTB
-            nKeys = numel(obj.Keys);
-            if obj.isPTB && nKeys
-                [ ~, ~, keyCode ] = KbCheck;
-                data(1:nKeys) = keyCode(KbName(obj.Keys));
+                % button press emulation (keyboard) via PTB
+                nKeys = numel(obj.Keys);
+                if obj.isPTB && nKeys
+                    [ ~, ~, keyCode ] = KbCheck;
+                    data(1:nKeys) = keyCode(KbName(obj.Keys));
+                end
             end
             
             if obj.BBoxReadout, obj.TOA = max(obj.TOA); end
